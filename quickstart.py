@@ -1,5 +1,8 @@
+import emailcache
 from email import message
 import os.path
+import base64
+import time
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -10,8 +13,38 @@ from googleapiclient.errors import HttpError
 # If modifying these scopes, delete the file token.json.
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 
+def decode_body(payload):
+   if 'parts' in payload:
+      for part in payload['parts']:
+        if part['mimeType'] in ['text/plain', 'text/html']:
+            data = part['body'].get('data')
+            if data:
+                return base64.urlsafe_b64decode(data).decode('utf-8')
+        else:
+            # Recurse if nested parts exist
+            content = decode_body(part)
+            if content:
+                return content
+   else:
+      data = payload['body'].get('data')
+      if data:
+          return base64.urlsafe_b64decode(data).decode('utf-8')
+   return None
 
 def main():
+  try:
+    last_refreshed = emailcache.get_last_refreshed()
+  except:
+    last_refreshed = -1
+  if last_refreshed != -1 and last_refreshed > int(time.time()) - 86400:
+      emails = emailcache.get_all_emails()
+      for email in emails:
+        print(f"Sender: {email[1]}\nSubject: {email[2]}\nBody: {email[3]}\n")
+      return
+  else:
+    get_new_emails()
+
+def get_new_emails():
   """Shows basic usage of the Gmail API.
   Lists the user's Gmail labels.
   """
@@ -43,18 +76,22 @@ def main():
     if not messages:
         print("No messages found.")
         return
-    
+
     print("Messages:")
+    emails = []
     for message in messages:
         msg = service.users().messages().get(userId="me", id=message["id"]).execute()
         for header in msg["payload"]["headers"]:
             if header["name"] == "From":
                 sender = header["value"]
             if header["name"] == "Subject":
-                subject = header["value"]
-        print(f"Sender: {sender}\nSubject: {subject}\n")
+                subject = header["value"]        
     
+        email = (msg["id"], sender, subject, decode_body(msg["payload"]), msg["internalDate"])
+        emails.append(email)    
 
+    emailcache.add_to_cache(emails)    
+    emailcache.prune_cache()
   except HttpError as error:
     # TODO(developer) - Handle errors from gmail API.
     print(f"An error occurred: {error}")
