@@ -11,6 +11,7 @@ def init_cache():
     c.execute('''CREATE TABLE IF NOT EXISTS emails
                  (id TEXT PRIMARY KEY, sender TEXT, subject TEXT, body TEXT, time INT)''')
     c.execute("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, last_refreshed TIMESTAMP)")
+    c.execute("INSERT OR IGNORE INTO meta VALUES (?, ?)", ("last_refreshed", -1))
     conn.commit()
     conn.close()
 
@@ -18,10 +19,18 @@ def add_to_cache(messages):
     init_cache()
     conn = sqlite3.connect(DB_NAME)
     for message in messages:
-        conn.execute("INSERT OR IGNORE INTO emails VALUES (?, ?, ?, ?, ?)", (message[0],message[1],message[2],message[3],message[4]))
-    conn.commit()
+        conn.execute("INSERT INTO emails VALUES (?, ?, ?, ?, ?)", (message[0],message[1],message[2],message[3],message[4]))
     conn.execute("REPLACE INTO meta VALUES (?, ?)", ("last_refreshed", int(time.time())))
+    conn.commit()
     conn.close()
+
+def get_by_id(email_id : str) -> dict:
+    conn = sqlite3.connect(DB_NAME)
+    c = conn.cursor()
+    c.execute("SELECT * FROM emails WHERE id = ?", (email_id,))
+    email = c.fetchone()
+    conn.close()
+    return email
 
 def get_last_refreshed():
     conn = sqlite3.connect(DB_NAME)
@@ -43,5 +52,12 @@ def get_all_emails():
 def prune_cache():
     conn = sqlite3.connect(DB_NAME)
     conn.execute("DELETE FROM emails WHERE time < ?", (int(time.time()) - 86400,))
+    conn.commit()
+    conn.close()
+
+def clear_cache():
+    conn = sqlite3.connect(DB_NAME)
+    conn.execute("DELETE FROM emails")
+    conn.execute("REPLACE INTO meta VALUES (?, ?)", ("last_refreshed", -1))
     conn.commit()
     conn.close()

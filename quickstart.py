@@ -31,18 +31,25 @@ def decode_body(payload):
           return base64.urlsafe_b64decode(data).decode('utf-8')
    return None
 
-def main():
+def clean_body(body : str) -> str:
+  return " ".join(body.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ').split())
+
+def get_emails():
   try:
     last_refreshed = emailcache.get_last_refreshed()
   except:
     last_refreshed = -1
-  if last_refreshed != -1 and last_refreshed > int(time.time()) - 86400:
-      emails = emailcache.get_all_emails()
-      for email in emails:
-        print(f"Sender: {email[1]}\nSubject: {email[2]}\nBody: {email[3]}\n")
-      return
-  else:
+  print(last_refreshed)
+  print(int(time.time()) - 3600 - last_refreshed)
+  if last_refreshed == -1 or last_refreshed < int(time.time()) - 3600:
     get_new_emails()
+    print("Refreshed emails.")
+  
+  email_list = []
+  emails = emailcache.get_all_emails()
+  for email in emails:
+    email_list.append({"id" : email[0], "Sender" : email[1], "Subject" : email[2], "Body" : clean_body(email[3][:50])})
+  return email_list
 
 def get_new_emails():
   """Shows basic usage of the Gmail API.
@@ -70,7 +77,7 @@ def get_new_emails():
   try:
     # Call the Gmail API
     service = build("gmail", "v1", credentials=creds)
-    results = service.users().messages().list(userId="me", includeSpamTrash=False, labelIds=["INBOX"], q="is:unread AND newer_than:1d").execute()
+    results = service.users().messages().list(userId="me", includeSpamTrash=False, labelIds=["INBOX"], q="newer_than:1d").execute()
     messages = results.get("messages", [])
 
     if not messages:
@@ -88,7 +95,7 @@ def get_new_emails():
                 subject = header["value"]        
     
         email = (msg["id"], sender, subject, decode_body(msg["payload"]), msg["internalDate"])
-        emails.append(email)    
+        emails.append(email)
 
     emailcache.add_to_cache(emails)    
     emailcache.prune_cache()
@@ -96,6 +103,12 @@ def get_new_emails():
     # TODO(developer) - Handle errors from gmail API.
     print(f"An error occurred: {error}")
 
+def get_email_details(email_id : str) -> dict:
+   email = emailcache.get_by_id(email_id)
+   return {"Sender" : email[1], "Subject" : email[2], "Body" : clean_body(email[3])}
+
+def main():
+  get_emails()
 
 if __name__ == "__main__":
   main()

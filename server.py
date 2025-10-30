@@ -1,6 +1,7 @@
 from typing import Any
 import httpx
 from mcp.server.fastmcp import FastMCP
+import json
 
 mcp = FastMCP("weather")
 
@@ -30,6 +31,24 @@ Severity: {props.get('severity', 'Unknown')}
 Description: {props.get('description', 'No description available')}
 Instructions: {props.get('instruction', 'No specific instructions provided')}
 """
+
+@mcp.tool()
+async def get_email_details(email_id: str) -> str:
+    """Get specificemail details based on email id."""
+    import quickstart
+    email = quickstart.get_email_details(email_id)
+    return json.dumps(email)
+
+@mcp.tool()
+async def check_emails() -> str:
+    """Get a preview of all current emails in the inbox.
+
+    Args:
+        None
+    """
+    import quickstart
+    emails = quickstart.get_emails()
+    return json.dumps(emails)
 
 @mcp.tool()
 async def get_alerts(state: str) -> str:
